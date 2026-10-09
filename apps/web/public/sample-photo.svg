@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" role="img" aria-label="Sample horizontal 3 to 2 photo">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#ffd8a8"/><stop offset="1" stop-color="#f28f78"/></linearGradient>
+    <linearGradient id="ground" x2="0" y2="1"><stop stop-color="#789b78"/><stop offset="1" stop-color="#345564"/></linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#sky)"/>
+  <circle cx="930" cy="180" r="110" fill="#fff0ba" opacity=".9"/>
+  <path d="M0 510 190 355 330 475 515 270 760 505 900 365 1200 560V800H0Z" fill="#496b75" opacity=".82"/>
+  <rect y="515" width="1200" height="285" fill="url(#ground)"/>
+  <path d="M0 650Q220 570 420 655T840 640 1200 610V800H0Z" fill="#2d5260" opacity=".75"/>
+  <circle cx="590" cy="355" r="68" fill="#704f4c"/>
+  <path d="M470 730q18-245 120-245t120 245Z" fill="#f5c1a5"/>
+  <path d="M470 730q18-245 120-245t120 245Z" fill="#e8edf0" opacity=".8"/>
+  <path d="M500 330q30-125 125-88 57 19 72 98-74-45-197-10Z" fill="#263c55"/>
+  <text x="54" y="90" fill="#fff" font-family="sans-serif" font-size="28" letter-spacing="6">SAMPLE PHOTO - 3:2</text>
+</svg>

@@ -1,0 +1,97 @@
+import { test, expect } from '@playwright/test';
+test.beforeEach(async ({ request }) => {
+  const status = await (await request.get('/api/system/status')).json();
+  expect(status.camera.provider, 'E2E requires mock camera').toBe('mock');
+  expect(status.printProvider, 'E2E must never print on real hardware').toBe('mock');
+});
+test('offline mock booth: six captures, four stable assignments, retake, final, one print, reset', async ({ page, request, browser }) => {
+  const invalidShots: string[] = []; page.on('request', req => { if (req.url().includes('/shot/-1')) invalidShots.push(req.url()); });
+  await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
+  const headers = { 'X-Booth-Client': '1' };
+  const post = (path: string) => request.post('/api' + path, { headers });
+  await post('/camera/connect'); await post('/booth/start');
+  const initial = await (await request.get('/api/settings')).json();
+  await request.put('/api/settings', { headers, data: { ...initial, countdown: 3, betweenShots: 0, thankYouTimeout: 3, autoPrint: false, cloudEnabled: true } });
+  const admin = await browser.newPage(); await admin.goto('/admin/dashboard');
+  await page.goto('/booth'); await page.getByRole('button', { name: /BẮT ĐẦU/ }).click();
+  await page.getByRole('button', { name: /Classic 4 Shot/ }).click();
+  await expect(page.getByAltText('Live view')).toBeVisible();
+  const began = Date.now(); await page.getByRole('button', { name: 'CHỤP ẢNH', exact: true }).click();
+  await expect(page.locator('.countdown')).toBeVisible();
+  const early = await (await request.get('/api/session/current')).json(); expect(early.shots).toHaveLength(0);
+  const duplicate = await post(`/session/${early.id}/capture`); expect(duplicate.status()).toBe(409);
+  await expect(page.locator('.assignment-photos')).toBeVisible({ timeout: 40000 });
+  for (const index of [1, 2, 3, 4]) await page.locator('.assignment-photo').nth(index - 1).click();
+  await expect(page.locator('.assignment-selected-count')).toContainText('4 / 4');
+  const assignedBefore = await page.locator('.assignment-slot:not(.duplicate-slot) img').evaluateAll(images => images.map(img => img.getAttribute('src')));
+  // Repeated server updates must not replace local assignments with SelectedShots=[].
+  for (let i = 0; i < 3; i++) await request.put('/api/settings', { headers, data: { ...initial, countdown: 3, betweenShots: 0, thankYouTimeout: 3, autoPrint: false, cloudEnabled: true } });
+  await expect.poll(() => page.locator('.assignment-slot:not(.duplicate-slot) img').evaluateAll(images => images.map(img => img.getAttribute('src')))).toEqual(assignedBefore);
+  // Failed selection must neither compose nor discard the local draft.
+  let composeRequests = 0; page.on('request', req => { if (req.url().endsWith('/compose')) composeRequests++; });
+  await page.route('**/api/session/*/select', route => route.fulfill({ status: 409, contentType: 'application/json', body: '{"error":"Temporary selection failure"}' }));
+  await page.getByRole('button', { name: /GHÉP ẢNH/ }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  expect(composeRequests).toBe(0);
+  await expect(page.locator('.assignment-selected-count')).toContainText('4 / 4');
+  await expect.poll(() => page.locator('.assignment-slot:not(.duplicate-slot) img').evaluateAll(images => images.map(img => img.getAttribute('src')))).toEqual(assignedBefore);
+  await page.unroute('**/api/session/*/select');
+
+  await page.getByRole('button', { name: /GHÉP ẢNH/ }).click();
+  await expect(page.getByRole('button', { name: 'XÁC NHẬN' })).toBeVisible({ timeout: 40000 });
+  expect(Date.now() - began).toBeGreaterThanOrEqual(12000);
+  await expect(admin.getByRole('heading', { name: 'FINAL_PREVIEW', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /CHỤP LẠI/ }).click();
+  await page.getByRole('button', { name: 'CHỤP ẢNH', exact: true }).click();
+  await expect(page.locator('.assignment-photos')).toBeVisible({ timeout: 40000 });
+  for (const index of [1, 2, 3, 4]) await page.locator('.assignment-photo').nth(index - 1).click();
+  await page.getByRole('button', { name: /GHÉP ẢNH/ }).click();
+  await expect(page.getByRole('button', { name: 'XÁC NHẬN' })).toBeVisible({ timeout: 40000 });
+  await expect(page.getByRole('button', { name: /CHỤP LẠI/ })).toHaveCount(0);
+  const image = page.getByAltText('Ảnh của bạn');
+  await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1200);
+  expect(await image.evaluate((img: HTMLImageElement) => img.naturalHeight)).toBe(1800);
+  await page.getByRole('button', { name: 'XÁC NHẬN' }).click();
+  await page.getByRole('button', { name: 'IN ẢNH', exact: true }).click();
+  await expect(page.getByText('Ảnh đã được gửi tới máy in.')).toBeVisible();
+  const final = await (await request.get('/api/session/current')).json();
+  expect(final.shots).toHaveLength(6); expect(final.selectedShots).toEqual([0, 1, 2, 3]); expect(final.confirmed).toBe(true); expect(final.printStatus).toBe('sent'); expect(final.uploadStatus).toBe('pending');
+  expect((await post(`/print/${final.id}`)).status()).toBe(409);
+  await page.getByRole('button', { name: 'HOÀN TẤT' }).click();
+  await expect(page.getByRole('button', { name: /BẮT ĐẦU/ })).toBeVisible({ timeout: 10000 });
+  const history = await (await request.get('/api/sessions')).json(); expect(history.some((s: { id: string }) => s.id === final.id)).toBe(true);
+  expect(invalidShots).toEqual([]);
+  await request.put('/api/settings', { headers, data: initial }); await admin.close();
+});
+test('local API rejects hostile origin and missing mutation header', async ({ request }) => {
+  expect((await request.post('/api/booth/start')).status()).toBe(403);
+  expect((await request.get('/api/system/status', { headers: { Origin: 'https://evil.example' } })).status()).toBe(403);
+});
+test('dashboard and template editor render', async ({ page }) => {
+  await page.goto('/admin/dashboard'); await expect(page.getByRole('heading', { name: 'Photobooth control' })).toBeVisible();
+  await page.screenshot({ path: '../../docs/admin-preview.png', fullPage: true });
+  await page.getByRole('link', { name: 'Khung ảnh' }).click(); await page.getByRole('button', { name: 'EDIT', exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: 'Visual slot editor' })).toBeVisible(); await expect(page.locator('.slot-editor-hit:not(.derived)')).toHaveCount(4);
+  await page.screenshot({ path: '../../docs/template-editor-preview.png', fullPage: true });
+});
+test('disconnect during countdown preserves shots and reconnect restores booth', async ({ page, request }) => {
+  const headers = { 'X-Booth-Client': '1' };
+  const post = (path: string, data?: unknown) => request.post('/api' + path, { headers, data });
+  await post('/booth/start');
+  const initial = await (await request.get('/api/settings')).json();
+  await request.put('/api/settings', { headers, data: { ...initial, countdown: 3, betweenShots: 1 } });
+  await page.goto('/booth'); await page.getByRole('button', { name: /BẮT ĐẦU/ }).click();
+  await page.getByRole('button', { name: /Double Portrait/ }).click(); await page.getByRole('button', { name: 'CHỤP ẢNH', exact: true }).click();
+  await expect.poll(async () => (await (await request.get('/api/session/current')).json()).shots.length, { timeout: 12000 }).toBe(1);
+  const session = await (await request.get('/api/session/current')).json();
+  await post('/camera/disconnect');
+  await expect(page.getByRole('heading', { name: 'Chờ chúng mình một chút' })).toBeVisible();
+  expect((await request.get(`/media/sessions/${session.id}/shot/0`)).status()).toBe(200);
+  await post('/camera/connect'); await post('/booth/start');
+  await expect(page.getByRole('button', { name: /BẮT ĐẦU/ })).toBeVisible();
+  await request.put('/api/settings', { headers, data: initial });
+  await page.screenshot({ path: '../../docs/booth-preview.png', fullPage: true });
+  await page.setViewportSize({ width: 1080, height: 1920 });
+  await expect(page.getByRole('button', { name: /BẮT ĐẦU/ })).toBeInViewport();
+  await page.screenshot({ path: '../../docs/booth-portrait-preview.png', fullPage: true });
+});

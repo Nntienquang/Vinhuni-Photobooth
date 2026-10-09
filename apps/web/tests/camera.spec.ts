@@ -1,0 +1,37 @@
+import { test, expect } from '@playwright/test';
+
+test('runtime camera settings, safe session guard and recovery', async ({ page, request }) => {
+  const headers = { 'X-Booth-Client': '1' };
+  const post = (path: string, data?: unknown) => request.post('/api' + path, { headers, data });
+  const preferences = { provider: 'mock', autoConnect: true, startLiveView: true };
+  await post('/booth/start');
+  expect((await post('/camera/provider', preferences)).ok()).toBeTruthy();
+  await post('/booth/start');
+  await page.goto('/admin/settings');
+  await expect(page.getByLabel('Camera Provider')).toHaveValue('mock');
+  await page.getByRole('button', { name: 'SCAN DEVICES', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Detected Mock Camera');
+  await page.getByRole('button', { name: 'TEST CAPTURE', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Test capture saved:');
+  await page.getByLabel('Camera Provider').selectOption('sony');
+  await expect(page.getByRole('alert')).toContainText('missing Windows USB/PTP transport');
+  await expect(page.getByLabel('Camera Provider')).toHaveValue('sony');
+  expect((await request.get('/api/camera/status').then(r => r.json())).availability).toBe('DependencyMissing');
+  await page.getByLabel('Camera Provider').selectOption('mock');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.getByRole('button', { name: 'DISCONNECT', exact: true }).click();
+  await expect.poll(async () => (await request.get('/api/camera/status').then(r => r.json())).connected).toBe(false);
+  await page.getByRole('button', { name: 'RECONNECT', exact: true }).click();
+  await expect.poll(async () => (await request.get('/api/camera/status').then(r => r.json())).liveView).toBe(true);
+  await post('/booth/start'); await post('/booth/select');
+  const templates = await request.get('/api/templates').then(r => r.json());
+  await post('/session', { templateId: templates[0].id });
+  const rejected = await post('/camera/provider', { ...preferences, provider: 'sony' });
+  expect(rejected.status()).toBe(409);
+  expect((await rejected.json()).error).toBe('Cannot change camera while a photo session is active.');
+  await post('/booth/pause');
+  expect((await post('/camera/provider', preferences)).status()).toBe(409);
+  await post('/booth/start');
+  await page.reload();
+  await expect(page.getByLabel('Camera Provider')).toHaveValue('mock');
+});

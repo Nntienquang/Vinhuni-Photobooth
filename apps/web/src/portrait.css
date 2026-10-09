@@ -1,0 +1,43 @@
+@media (orientation: portrait) and (min-width: 700px) {
+  .booth .welcome {
+    text-align: center;
+    padding: 12vh 0 40vh;
+  }
+  .booth .welcome .eyebrow,
+  .booth .welcome-details {
+    justify-content: center;
+  }
+  .booth .welcome h1 { font-size: 7vw; }
+  .booth .welcome p { font-size: 20px; }
+  .booth .welcome .jumbo { min-width: 270px; min-height: 85px; font-size: 20px; }
+  .booth .welcome-details { margin-top: 45px; font-size: 14px; }
+  .booth .decor-card {
+    display: block;
+    opacity: 1;
+    width: 250px;
+    right: calc(50% - 235px);
+    top: auto;
+    bottom: 14vh;
+  }
+  .booth .decor-card div { height: 175px; }
+  .booth .decor-card div::before { left: 80px; }
+  .booth .decor-card.card-two {
+    width: 225px;
+    right: calc(50% - 5px);
+    top: auto;
+    bottom: 11vh;
+  }
+  .booth .card-two div { height: 220px; }
+  .booth .result-layout {
+    grid-template-columns: 1fr;
+    gap: 40px;
+    text-align: center;
+  }
+  .booth .final-photo { height: 42vh; }
+  .booth .result-layout > div:last-child > .primary,
+  .booth .result-layout > div:last-child > .secondary,
+  .booth .qr { margin-left: auto; margin-right: auto; }
+  .booth .capture-layout { margin-top: 7vh; }
+  .booth .viewfinder { height: 48vh; }
+  .booth .capture-footer { margin-top: 35px; }
+}

@@ -1,0 +1,17 @@
+node_modules/
+dist/
+bin/
+obj/
+.env
+.env.local
+.vercel/
+data/**
+!data/.gitkeep
+logs/
+apps/bridge/wwwroot/
+apps/bridge/vendor/canon/*.dll
+test-results/
+playwright-report/
+.tools/
+artifacts/
+*.tsbuildinfo
