@@ -7,8 +7,8 @@ public sealed class PhotoComposer
         var scale = Math.Max(targetWidth / width, targetHeight / height);
         var w = targetWidth / scale;
         var h = targetHeight / scale;
-var x = Math.Clamp(width * focalX - w / 2, 0, Math.Max(0, width - w));
-var y = Math.Clamp(height * focalY - h / 2, 0, Math.Max(0, height - h));
+        var x = Math.Clamp(width * focalX - w / 2, 0, width - w);
+        var y = Math.Clamp(height * focalY - h / 2, 0, height - h);
         return new SKRect(x, y, x + w, y + h);
     }
     public static SKBitmap Oriented(string path)

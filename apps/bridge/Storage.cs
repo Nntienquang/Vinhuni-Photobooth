@@ -48,25 +48,22 @@ public sealed class Storage
         lock (saveGate)
         {
             var persisted = FindOrNull(s.Id);
-            if (persisted is not null && (persisted.UploadStatus == "uploaded" || persisted.CloudUpdatedAt > s.CloudUpdatedAt || (persisted.CloudUpdatedAt is not null && s.CloudUpdatedAt is null)))
+            if (persisted?.UploadStatus == "uploaded")
             {
-                s.CopyCloudFrom(persisted);
+                s.UploadStatus = persisted.UploadStatus;
+                s.ShareUrl = persisted.ShareUrl;
             }
             WriteJson(Path.Combine(SessionDir(s), "session.json"), s);
             Put("sessions", s.Id, s);
         }
     }
-    public void UpdateUpload(string id, string status, string? url, string? shareId = null, string? imageUrl = null, string? error = null, DateTimeOffset? updatedAt = null)
+    public void UpdateUpload(string id, string status, string? url)
     {
         lock (saveGate)
         {
             var latest = Find(id);
             latest.UploadStatus = status;
             latest.ShareUrl = url;
-            latest.ShareId = shareId;
-            latest.ImageUrl = imageUrl;
-            latest.CloudLastError = error;
-            latest.CloudUpdatedAt = updatedAt ?? DateTimeOffset.UtcNow;
             Save(latest);
         }
     }

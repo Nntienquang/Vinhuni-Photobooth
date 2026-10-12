@@ -46,19 +46,6 @@ public sealed class Session
     }
     public string PrintStatus { get; set; } = "none";
     public string UploadStatus { get; set; } = "none";
-    public string? ShareId { get; set; }
-    public string? ImageUrl { get; set; }
-    public string? CloudLastError { get; set; }
-    public DateTimeOffset? CloudUpdatedAt { get; set; }
-    public void CopyCloudFrom(Session source)
-    {
-        UploadStatus = source.UploadStatus;
-        ShareUrl = source.ShareUrl;
-        ShareId = source.ShareId;
-        ImageUrl = source.ImageUrl;
-        CloudLastError = source.CloudLastError;
-        CloudUpdatedAt = source.CloudUpdatedAt;
-    }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
     public string? Error
     {

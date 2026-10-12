@@ -1961,12 +1961,6 @@ td button {
     font-size: clamp(40px, 4vw, 70px)
 }
 
-/* Leave room for a scan-sized QR and the finish action on customer displays. */
-.booth-thank-you { padding: 16px 0; }
-.booth-thank-you .orb { width: 64px; height: 64px; margin-bottom: 12px; }
-.booth-thank-you h1 { font-size: clamp(32px, 3vw, 48px); margin: 10px 0; }
-.booth-thank-you p { margin: 8px 0; }
-
 .spinner {
     width: 70px;
     height: 70px;
