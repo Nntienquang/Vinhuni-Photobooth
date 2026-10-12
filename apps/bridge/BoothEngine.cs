@@ -45,7 +45,7 @@ public sealed class BoothEngine(Storage storage, Templates templates, PhotoCompo
             cloudConfigured = cloud.Configured,
             printProvider = printer.Provider,
             printerReady = printer.Ready(Settings.Printer),
-            pendingUploads = sessions.Count(s => s.UploadStatus == "pending"),
+            pendingUploads = sessions.Count(s => s.UploadStatus is "pending" or "uploading" or "failed"),
             sessionsToday = today.Count,
             photosToday = today.Sum(s => s.Shots.Count),
             finalsToday = today.Count(s => s.FinalPath != null),
@@ -233,7 +233,7 @@ public sealed class BoothEngine(Storage storage, Templates templates, PhotoCompo
     public async Task ReorderPhotos(string id, IReadOnlyList<int> indices) => await SelectPhotos(id, indices);
     public async Task Compose(string id) => await Exclusive(async () => { var s = Require(id); SessionRules.Require(s, BoothState.PHOTO_SELECTION, BoothState.ASSIGN, BoothState.FILTER, BoothState.ERROR); if (s.Confirmed) throw new InvalidOperationException("Final locked"); await ComposeCore(s); });
     public async Task Retake(string id) => await Exclusive(async () => { var s = Require(id); SessionRules.Retake(s, Settings); s.Retakes++; s.Shots = []; s.SelectedShots = []; s.FinalPath = null; s.Error = null; await camera.StartLiveViewAsync(); await Set(BoothState.LIVE_VIEW); });
-    public async Task Confirm(string id) => await Exclusive(async () => { var s = Require(id); SessionRules.Require(s, BoothState.FINAL_PREVIEW); s.Confirmed = true; s.UploadStatus = Settings.CloudEnabled ? "pending" : "disabled"; storage.Save(s); if (Settings.AutoPrint) await PrintCore(s); else await Set(BoothState.QR_READY); if (Settings.CloudEnabled && cloud.Configured) _ = RetryUploadsSafe(); });
+    public async Task Confirm(string id) => await Exclusive(async () => { var s = Require(id); SessionRules.Require(s, BoothState.FINAL_PREVIEW); s.Confirmed = true; s.UploadStatus = Settings.CloudEnabled ? "uploading" : "none"; storage.Save(s); if (Settings.CloudEnabled) _ = Task.Run(() => RetryUploadSafe(id)); if (Settings.AutoPrint) await PrintCore(s); else await Set(BoothState.QR_READY); });
     public async Task ResolvePrint(string id, bool alreadyPrinted) => await Exclusive(async () =>
     {
         var session = Current?.Id == id ? Current : storage.Find(id);
@@ -286,18 +286,30 @@ public sealed class BoothEngine(Storage storage, Templates templates, PhotoCompo
             return;
         try
         {
-            foreach (var stored in storage.Sessions().Where(s => s.UploadStatus == "pending"))
+            foreach (var stored in storage.Sessions().Where(s => s.Confirmed && s.UploadStatus is "pending" or "uploading" or "failed"))
             {
-                await cloud.Upload(stored);
-                if (Current?.Id == stored.Id)
-                {
-                    Current.UploadStatus = stored.UploadStatus;
-                    Current.ShareUrl = stored.ShareUrl;
-                }
-                await Publish("cloudUploadFinished");
+                await RetryUpload(stored.Id);
             }
         }
         finally { uploads.Release(); }
+    }
+    public async Task RetryUpload(string id)
+    {
+        var stored = storage.Find(id);
+        await cloud.Upload(stored, Refresh);
+        await Refresh();
+        async Task Refresh()
+        {
+            await gate.WaitAsync();
+            try { if (Current?.Id == id) Current.CopyCloudFrom(storage.Find(id)); }
+            finally { gate.Release(); }
+            await Publish("cloudUploadFinished");
+        }
+    }
+    async Task RetryUploadSafe(string id)
+    {
+        try { await RetryUpload(id); }
+        catch { logger.LogWarning("Cloud upload unavailable for session {Session}", id); }
     }
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -345,7 +357,7 @@ public sealed class BoothEngine(Storage storage, Templates templates, PhotoCompo
                     await Reset();
                 if (State == BoothState.QR_READY && age > Settings.IdleTimeout)
                     await Finish();
-                if (cloud.Configured && DateTimeOffset.Now > nextUpload)
+                if (Settings.CloudEnabled && cloud.Configured && DateTimeOffset.Now > nextUpload)
                 {
                     nextUpload = DateTimeOffset.Now.AddSeconds(30);
                     _ = RetryUploadsSafe();
@@ -362,7 +374,7 @@ public sealed class BoothEngine(Storage storage, Templates templates, PhotoCompo
         {
             await RetryUploads();
         }
-        catch (Exception e) { logger.LogError(e, "Upload retry failed"); }
+        catch { logger.LogWarning("Cloud upload retry unavailable"); }
     }
     async Task SendFrame(byte[] bytes, CancellationToken token)
     {
