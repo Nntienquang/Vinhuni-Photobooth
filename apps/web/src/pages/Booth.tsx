@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
+
 import { ArrowRight, Camera, Check, Expand, Heart, RotateCcw, Sparkles } from 'lucide-react';
 
 import type { Session, Template } from '@booth/shared';
@@ -11,6 +13,20 @@ import { assignPhoto as placePhoto, createAssignments, getCapturedPhotoUrl, isCo
 import { captureCount as templateCaptureCount, selectionCount as templateSelectionCount, customerPhase, loadAssignment, saveAssignment, type AssignmentDraft } from '../boothFlow';
 
 
+
+export function CloudQr({ session }: { session: Session }) {
+  if (session.uploadStatus === 'none' || session.uploadStatus === 'disabled') return null;
+  return <div className="cloud-qr" aria-live="polite" style={{ margin: '16px auto' }}>
+    {session.uploadStatus === 'uploaded' && session.shareUrl ? <>
+      <QRCodeSVG value={session.shareUrl} size={300} level="M" marginSize={4} bgColor="#ffffff" fgColor="#000000" title="Quét mã để tải ảnh" style={{ width: 'min(300px, 80vw)', height: 'auto', display: 'block', margin: '0 auto' }} />
+      <p>Quét mã để tải ảnh</p><small>Ảnh chất lượng gốc</small>
+    </> : session.uploadStatus === 'uploading' || session.uploadStatus === 'pending' ? <>
+      <p>Đang tạo mã QR...</p><small>Ảnh đã được lưu và có thể in bình thường.</small>
+    </> : <>
+      <p>Chưa thể tạo mã QR.</p><small>Ảnh vẫn đã được lưu và in bình thường.</small>
+    </>}
+  </div>;
+}
 
 function FrameAssignment({ session, assignments, activeSlot, onSlotClick, mirror }: { session: Session; assignments: SlotAssignment[]; activeSlot: number; onSlotClick: (slot: number) => void; mirror: boolean }) {
   const slots = displaySlots(session.template).sort((a, b) => (a.slot.order ?? 0) - (b.slot.order ?? 0));
@@ -121,7 +137,7 @@ export function Booth() {
       {(state === 'COMPOSING' || state === 'PRINTING') && <section className="booth-center"><div className="spinner" /><h1>{state === 'COMPOSING' ? 'Kỷ niệm đang thành hình…' : 'Đang in ảnh…'}</h1><p>Chờ một chút nhé, ảnh đẹp sắp đến rồi.</p></section>}
       {state === 'FINAL_PREVIEW' && session && <section className="result-layout"><div className="final-photo"><img src={final} alt="Ảnh của bạn" /></div><div><div className="eyebrow">03 / KHOẢNH KHẮC CỦA BẠN</div><h1>Đẹp như<br /><em>chính bạn.</em></h1><p>Ảnh của bạn đã sẵn sàng.<br />Bạn có muốn giữ khoảnh khắc này?</p><button className="primary jumbo" disabled={busy} onClick={() => void action(`/session/${session.id}/confirm`)}>XÁC NHẬN <Check /></button>{status.settings.allowRetake && session.retakes < status.settings.maxRetake && <button className="secondary" disabled={busy} onClick={() => void action(`/session/${session.id}/retake`)}><RotateCcw size={18} /> CHỤP LẠI ({status.settings.maxRetake - session.retakes})</button>}</div></section>}
       {state === 'QR_READY' && session && <section className="result-layout"><div className="final-photo"><img src={final} alt="Ảnh hoàn chỉnh" /></div><div><div className="eyebrow">04 / MANG KỶ NIỆM VỀ</div><h1>Ảnh đẹp.<br /><em>Gửi bạn nhé!</em></h1><p>Ảnh đã được lưu.</p>{session.printStatus === 'sent' && <p><Check size={18} /> Ảnh đã được gửi tới máy in.</p>}{!status.settings.autoPrint && session.printStatus === 'none' && <button className="secondary" disabled={busy} onClick={() => void action(`/print/${session.id}`)}>IN ẢNH</button>}<button className="primary" disabled={busy} onClick={() => void action('/booth/finish')}>HOÀN TẤT <ArrowRight /></button></div></section>}
-      {state === 'THANK_YOU' && <section className="booth-center"><div className="orb"><Heart size={54} /></div><div className="eyebrow">A MOMENT TO REMEMBER</div><h1>Cảm ơn bạn<br /><em>đã ghé chơi!</em></h1><p>Hẹn gặp lại ở những khoảnh khắc tiếp theo.</p></section>}
+      {state === 'THANK_YOU' && <section className="booth-center booth-thank-you"><div className="orb"><Heart size={54} /></div><div className="eyebrow">A MOMENT TO REMEMBER</div><h1>Cảm ơn bạn<br /><em>đã ghé chơi!</em></h1><p>Hẹn gặp lại ở những khoảnh khắc tiếp theo.</p>{session && <CloudQr session={session} />}<button className="primary" disabled={busy} onClick={() => void action('/booth/start')}>PHIÊN MỚI <ArrowRight /></button></section>}
       {(state === 'ERROR' || state === 'MAINTENANCE') && <section className="booth-center"><div className="orb"><Camera size={54} /></div><h1>Chờ chúng mình một chút</h1><p>Nhân viên đang hỗ trợ để bạn có tấm ảnh đẹp nhất.</p>{session?.confirmed && <p>Ảnh của bạn đã được lưu an toàn.</p>}</section>}
     </>}
     {error && <div className="customer-notice" role="alert">{error}</div>}<footer className="booth-footer"><span>VINHUNI · MADE OF MEMORIES</span><span>YOUR FRIENDS. YOUR MOMENT.</span></footer>
